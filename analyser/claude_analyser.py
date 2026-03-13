@@ -24,7 +24,7 @@ Singapore (sg), Australia (au), United Kingdom (uk), European Union (eu), ASEAN 
 Be precise, neutral, and concise. Avoid speculation. Flag when something is genuinely significant."""
 
 
-ITEM_ANALYSIS_PROMPT = """Analyse this policy/regulatory item and return a JSON object with exactly these fields:
+ITEM_ANALYSIS_PROMPT = r"""Analyse this policy/regulatory item and return a JSON object with exactly these fields:
 
 {
   "summary": "<2-3 sentence plain-English summary of what this item is about and why it matters>",
