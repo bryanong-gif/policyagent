@@ -24,9 +24,9 @@ Singapore (sg), Australia (au), United Kingdom (uk), European Union (eu), ASEAN 
 Be precise, neutral, and concise. Avoid speculation. Flag when something is genuinely significant."""
 
 
-ITEM_ANALYSIS_PROMPT = r"""Analyse this policy/regulatory item and return a JSON object with exactly these fields:
+ITEM_ANALYSIS_PROMPT = """Analyse this policy/regulatory item and return a JSON object with exactly these fields:
 
-{
+{{
   "summary": "<2-3 sentence plain-English summary of what this item is about and why it matters>",
   "key_points": ["<point 1>", "<point 2>", "<point 3>"],
   "domain": "<primary domain: online_safety | ai_safety | tech_governance | other>",
@@ -36,7 +36,7 @@ ITEM_ANALYSIS_PROMPT = r"""Analyse this policy/regulatory item and return a JSON
   "relevance_score": <integer 1-10, where 10 = highly relevant to online safety/AI safety/tech governance>,
   "tags": ["<tag1>", "<tag2>"],
   "implications": "<1 sentence: practical implication for organisations operating in this jurisdiction>"
-}
+}}
 
 Urgency guide:
 - urgent: new law passed, major enforcement action, significant policy reversal
