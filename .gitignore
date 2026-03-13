@@ -1,0 +1,9 @@
+config/config.yaml
+storage/*.db
+*.db
+*.csv
+.env
+__pycache__/
+*.pyc
+.DS_Store
+policy_export_*.csv

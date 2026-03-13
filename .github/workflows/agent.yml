@@ -1,0 +1,134 @@
+name: Policy Trend Agent
+
+on:
+  schedule:
+    # Every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "standard"
+        type: choice
+        options:
+          - standard
+          - digest
+          - dry-run
+      jurisdiction:
+        description: "Filter to jurisdiction (leave blank for all)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - sg
+          - au
+          - uk
+          - eu
+          - asean
+
+jobs:
+  run-agent:
+    name: Run Policy Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write config from secrets
+        run: |
+          cat > config/config.yaml << EOF
+          anthropic:
+            api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+            model: "claude-sonnet-4-20250514"
+
+          slack:
+            webhook_url: "${{ secrets.SLACK_WEBHOOK_URL }}"
+            alert_channel_webhook: "${{ secrets.SLACK_ALERT_WEBHOOK_URL }}"
+
+          email:
+            enabled: ${{ secrets.SMTP_HOST != '' }}
+            smtp_host: "${{ secrets.SMTP_HOST }}"
+            smtp_port: 587
+            smtp_user: "${{ secrets.SMTP_USER }}"
+            smtp_pass: "${{ secrets.SMTP_PASS }}"
+            recipients: ${{ secrets.EMAIL_RECIPIENTS }}
+
+          agent:
+            run_interval_hours: 6
+            lookback_hours: 8
+            max_items_per_run: 80
+            digest_schedule: "weekly"
+            digest_day: "monday"
+            digest_time: "08:00"
+
+          database:
+            path: "storage/policy_agent.db"
+
+          filters:
+            min_relevance_score: 6
+            deduplicate: true
+            languages:
+              - en
+          EOF
+
+      - name: Restore database cache
+        uses: actions/cache@v4
+        with:
+          path: storage/policy_agent.db
+          key: policy-db-${{ github.run_number }}
+          restore-keys: |
+            policy-db-
+
+      - name: Run agent (standard)
+        if: github.event_name == 'schedule' || inputs.mode == 'standard'
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.jurisdiction }}" ]; then
+            ARGS="--jurisdiction ${{ inputs.jurisdiction }}"
+          fi
+          python scripts/run_agent.py $ARGS
+
+      - name: Run agent (force digest)
+        if: inputs.mode == 'digest'
+        run: python scripts/run_agent.py --digest
+
+      - name: Run agent (dry run)
+        if: inputs.mode == 'dry-run'
+        run: python scripts/run_agent.py --dry-run
+
+      - name: Upload DB artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-db-${{ github.run_number }}
+          path: storage/policy_agent.db
+          retention-days: 30
+
+      - name: Export CSV on weekly digest day (Monday)
+        if: github.event_name == 'schedule'
+        run: |
+          DAY=$(date +%u)
+          if [ "$DAY" = "1" ]; then
+            python scripts/export_csv.py
+          fi
+
+      - name: Upload weekly CSV export
+        if: github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-export-${{ github.run_number }}
+          path: policy_export_*.csv
+          retention-days: 90
+          if-no-files-found: ignore

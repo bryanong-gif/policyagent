@@ -1,0 +1,52 @@
+# config/config.example.yaml
+# Copy to config.yaml and fill in your values.
+# Never commit config.yaml to version control — it's in .gitignore.
+
+anthropic:
+  api_key: "sk-ant-YOUR_KEY_HERE"
+  model: "claude-sonnet-4-20250514"
+
+# ── Email (Gmail recommended) ──────────────────────────────────────────────
+# Gmail setup:
+#   1. Enable 2-Step Verification on your Google account
+#   2. Go to myaccount.google.com/apppasswords
+#   3. Create an app password → use that as smtp_pass (not your real password)
+email:
+  enabled: true
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  smtp_user: "you@gmail.com"
+  smtp_pass: "xxxx xxxx xxxx xxxx"   # 16-char Gmail app password
+  recipients:
+    - "you@gmail.com"
+    - "colleague@example.com"        # add as many as needed
+
+# ── Telegram ───────────────────────────────────────────────────────────────
+# Setup:
+#   1. Message @BotFather on Telegram → /newbot → copy the token
+#   2. Add the bot to your group/channel as admin
+#   3. Get chat_id: https://api.telegram.org/bot<TOKEN>/getUpdates
+#      (send a message to the bot first, then open that URL)
+telegram:
+  enabled: true
+  bot_token: "123456789:ABCDefGhIJKlmNoPQRsTUVwxYZ"
+  chat_id: "-1001234567890"          # group/channel ID (negative number)
+  # For personal chat use your own user ID (positive number)
+
+# ── Agent behaviour ────────────────────────────────────────────────────────
+agent:
+  lookback_hours: 8           # fetch items published in last N hours
+  max_items_per_run: 80       # cap to control API costs
+  digest_schedule: "weekly"   # weekly | daily
+  digest_day: "monday"        # day of week for weekly digest
+  digest_time: "08:00"        # time of day for daily digest (local time)
+
+# ── Database ───────────────────────────────────────────────────────────────
+database:
+  path: "storage/policy_agent.db"   # SQLite (local / GitHub Actions)
+  # For Railway Postgres, set DATABASE_URL env var — no change needed here
+
+# ── Filters ────────────────────────────────────────────────────────────────
+filters:
+  min_relevance_score: 6      # 1–10; items below this are dropped
+  deduplicate: true

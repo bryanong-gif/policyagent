@@ -1,0 +1,258 @@
+# config/sources.yaml
+# All RSS feeds and scrape targets for the policy trend agent.
+# type: rss   → fetched via feedparser
+# type: scrape → fetched via BeautifulSoup (requires a selector config)
+
+sources:
+
+  # ─────────────────────────────────────────────
+  # SINGAPORE
+  # ─────────────────────────────────────────────
+  - id: sg_imda_news
+    name: "IMDA News"
+    url: "https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases"
+    type: scrape
+    jurisdiction: sg
+    domain: [online_safety, ai_safety, tech_governance]
+    selector: "article.news-listing"
+    link_selector: "a.news-title"
+    date_selector: "span.date"
+
+  - id: sg_pdpc_news
+    name: "PDPC News & Media"
+    url: "https://www.pdpc.gov.sg/news-and-events/news"
+    type: scrape
+    jurisdiction: sg
+    domain: [tech_governance]
+    selector: "div.news-item"
+    link_selector: "a"
+    date_selector: "span.date"
+
+  - id: sg_mas_media
+    name: "MAS Media Releases"
+    url: "https://www.mas.gov.sg/news"
+    type: scrape
+    jurisdiction: sg
+    domain: [tech_governance, ai_safety]
+    selector: "div.news-item"
+    link_selector: "h3 a"
+    date_selector: "span.date"
+
+  - id: sg_smart_nation
+    name: "Smart Nation Press Releases"
+    url: "https://www.smartnation.gov.sg/media-hub/press-releases"
+    type: scrape
+    jurisdiction: sg
+    domain: [ai_safety, tech_governance]
+    selector: "div.press-release-item"
+    link_selector: "a"
+    date_selector: "span.date"
+
+  - id: sg_govtech_blog
+    name: "GovTech Blog"
+    url: "https://www.tech.gov.sg/media/technews/"
+    type: scrape
+    jurisdiction: sg
+    domain: [ai_safety, tech_governance]
+    selector: "article"
+    link_selector: "a.article-title"
+    date_selector: "time"
+
+  # ─────────────────────────────────────────────
+  # AUSTRALIA
+  # ─────────────────────────────────────────────
+  - id: au_acma_news
+    name: "ACMA News"
+    url: "https://www.acma.gov.au/newsroom"
+    type: scrape
+    jurisdiction: au
+    domain: [online_safety, tech_governance]
+    selector: "div.view-content article"
+    link_selector: "a"
+    date_selector: "span.date-display-single"
+
+  - id: au_oaic_news
+    name: "OAIC News"
+    url: "https://www.oaic.gov.au/updates/news-and-media"
+    type: scrape
+    jurisdiction: au
+    domain: [tech_governance, online_safety]
+    selector: "article.news-item"
+    link_selector: "h3 a"
+    date_selector: "time"
+
+  - id: au_ag_news
+    name: "Attorney-General's Dept"
+    url: "https://www.ag.gov.au/about-us/news-and-media/media-releases"
+    type: scrape
+    jurisdiction: au
+    domain: [tech_governance, online_safety]
+    selector: "div.news-listing article"
+    link_selector: "a.news-title"
+    date_selector: "span.date"
+
+  - id: au_dsr_blog
+    name: "Dept of Industry – AI"
+    url: "https://www.industry.gov.au/news/media-releases"
+    type: scrape
+    jurisdiction: au
+    domain: [ai_safety, tech_governance]
+    selector: "article"
+    link_selector: "a"
+    date_selector: "time"
+
+  - id: au_esafety_news
+    name: "eSafety Commissioner News"
+    url: "https://www.esafety.gov.au/newsroom"
+    type: scrape
+    jurisdiction: au
+    domain: [online_safety]
+    selector: "article"
+    link_selector: "h3 a"
+    date_selector: "time"
+
+  # ─────────────────────────────────────────────
+  # UNITED KINGDOM
+  # ─────────────────────────────────────────────
+  - id: uk_ofcom_news
+    name: "Ofcom News"
+    url: "https://www.ofcom.org.uk/news-centre/latest/rss"
+    type: rss
+    jurisdiction: uk
+    domain: [online_safety, tech_governance]
+
+  - id: uk_ico_news
+    name: "ICO News"
+    url: "https://ico.org.uk/about-the-ico/media-centre/news-and-blogs/rss/"
+    type: rss
+    jurisdiction: uk
+    domain: [tech_governance, online_safety]
+
+  - id: uk_dsit_news
+    name: "DSIT Press Releases"
+    url: "https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=department-for-science-innovation-and-technology"
+    type: rss
+    jurisdiction: uk
+    domain: [ai_safety, tech_governance, online_safety]
+
+  - id: uk_aisi_news
+    name: "AI Safety Institute"
+    url: "https://www.gov.uk/government/organisations/ai-safety-institute.atom"
+    type: rss
+    jurisdiction: uk
+    domain: [ai_safety]
+
+  - id: uk_cma_news
+    name: "CMA News"
+    url: "https://www.gov.uk/government/organisations/competition-and-markets-authority.atom"
+    type: rss
+    jurisdiction: uk
+    domain: [tech_governance]
+
+  # ─────────────────────────────────────────────
+  # EUROPEAN UNION
+  # ─────────────────────────────────────────────
+  - id: eu_commission_digital
+    name: "EC Digital News"
+    url: "https://digital-strategy.ec.europa.eu/en/news/rss.xml"
+    type: rss
+    jurisdiction: eu
+    domain: [online_safety, ai_safety, tech_governance]
+
+  - id: eu_edpb_news
+    name: "EDPB News"
+    url: "https://www.edpb.europa.eu/news/news_en.rss"
+    type: rss
+    jurisdiction: eu
+    domain: [tech_governance, online_safety]
+
+  - id: eu_enisa_news
+    name: "ENISA News"
+    url: "https://www.enisa.europa.eu/media/news-items/RSS"
+    type: rss
+    jurisdiction: eu
+    domain: [ai_safety, tech_governance]
+
+  - id: eu_ai_office
+    name: "EU AI Office"
+    url: "https://digital-strategy.ec.europa.eu/en/policies/ai-office"
+    type: scrape
+    jurisdiction: eu
+    domain: [ai_safety]
+    selector: "article"
+    link_selector: "a"
+    date_selector: "time"
+
+  - id: eu_parliament_news
+    name: "EP Digital Committee"
+    url: "https://www.europarl.europa.eu/rss/en/press-releases-all.xml"
+    type: rss
+    jurisdiction: eu
+    domain: [ai_safety, tech_governance, online_safety]
+    keywords_filter: ["AI", "digital", "online safety", "data", "cyber"]
+
+  # ─────────────────────────────────────────────
+  # ASEAN
+  # ─────────────────────────────────────────────
+  - id: asean_secretariat_news
+    name: "ASEAN Secretariat News"
+    url: "https://asean.org/category/news/feed/"
+    type: rss
+    jurisdiction: asean
+    domain: [ai_safety, tech_governance, online_safety]
+    keywords_filter: ["digital", "AI", "cyber", "data", "technology", "online"]
+
+  - id: asean_aigorv_docs
+    name: "ASEAN AI Governance"
+    url: "https://asean.org/asean-guide-on-ai-governance-and-ethics/"
+    type: scrape
+    jurisdiction: asean
+    domain: [ai_safety]
+    selector: "div.entry-content p, div.entry-content h2"
+    link_selector: "a"
+    date_selector: "time"
+
+  # ─────────────────────────────────────────────
+  # CROSS-JURISDICTIONAL / ACADEMIC
+  # ─────────────────────────────────────────────
+  - id: oecd_ai_news
+    name: "OECD AI Policy Observatory"
+    url: "https://oecd.ai/en/news/rss"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety, tech_governance]
+
+  - id: ada_lovelace_blog
+    name: "Ada Lovelace Institute"
+    url: "https://www.adalovelaceinstitute.org/feed/"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety, tech_governance]
+
+  - id: ai_now_news
+    name: "AI Now Institute"
+    url: "https://ainowinstitute.org/feed"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety, tech_governance]
+
+  - id: cf_internet_blog
+    name: "Centre for Internet & Society"
+    url: "https://cis-india.org/feed"
+    type: rss
+    jurisdiction: asean
+    domain: [online_safety, tech_governance]
+
+  - id: tech_policy_press
+    name: "Tech Policy Press"
+    url: "https://techpolicy.press/feed/"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety, tech_governance, online_safety]
+
+  - id: future_of_life
+    name: "Future of Life Institute"
+    url: "https://futureoflife.org/feed/"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety]

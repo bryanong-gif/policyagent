@@ -1,0 +1,12 @@
+anthropic>=0.25.0
+feedparser>=6.0.11
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+schedule>=1.2.1
+rich>=13.7.0          # pretty terminal output
+jinja2>=3.1.4         # email/digest templating
+flask>=3.0.0          # web dashboard
+psycopg2-binary>=2.9  # postgres (optional; only needed if using Postgres)
