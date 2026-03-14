@@ -354,7 +354,7 @@ sources:
 
   - id: sg_smu_policymatters
     name: "SMU Policymatters"
-    url: "https://policymatters.smu.edu.sg/feed"
+    url: "https://www.smu.edu.sg/research/research-news/feed"
     type: rss
     jurisdiction: sg
     domain: [tech_governance, online_safety]
