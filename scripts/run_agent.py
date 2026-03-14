@@ -18,6 +18,7 @@ from rich.table import Table
 from collector.rss_collector import fetch_all_rss
 from collector.scraper import fetch_all_scraped
 from collector.web_search_collector import WebSearchCollector
+from collector.deduplicator import deduplicate
 from analyser.claude_analyser import PolicyAnalyser
 from storage.database import PolicyDatabase
 from delivery.email_delivery import (
@@ -173,6 +174,9 @@ def run(args):
         f"\n[green]Total raw items: {len(all_raw)}[/green] "
         f"(Web search: {len(web_items)}, RSS: {len(rss_items)}, Scraped: {len(scraped_items)})"
     )
+
+    # Deduplicate across sources before analysis
+    all_raw = deduplicate(all_raw)
 
     if not all_raw:
         console.print("[yellow]No new items found. Exiting.[/yellow]")
