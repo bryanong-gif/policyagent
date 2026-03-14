@@ -46,7 +46,8 @@ class PolicyDatabasePG:
                        RETURNING id""",
                     (
                         h, item.source_id, item.title, item.url,
-                        item.published, item.jurisdiction,
+                        None if item.published in ('unknown', '', None) else item.published,
+                        item.jurisdiction,
                         item.domain, item.content_type,
                         item.urgency, item.sentiment, item.relevance_score,
                         item.summary,
