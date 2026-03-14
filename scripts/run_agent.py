@@ -2,14 +2,9 @@
 # scripts/run_agent.py
 """
 Policy Trend Agent — main runner.
-Delivery: Email + Telegram (no Slack).
+Two-tier collection: web search sweep (broad) + RSS/scrape (deep).
+Delivery: Email + Telegram.
 Config: env vars (Railway) or config/config.yaml (local).
-
-Usage:
-  python scripts/run_agent.py                    # standard run
-  python scripts/run_agent.py --digest           # force send digest now
-  python scripts/run_agent.py --jurisdiction uk  # one jurisdiction only
-  python scripts/run_agent.py --dry-run          # analyse, don't store/send
 """
 
 import sys, os, argparse
@@ -22,6 +17,7 @@ from rich.table import Table
 
 from collector.rss_collector import fetch_all_rss
 from collector.scraper import fetch_all_scraped
+from collector.web_search_collector import WebSearchCollector
 from analyser.claude_analyser import PolicyAnalyser
 from storage.database import PolicyDatabase
 from delivery.email_delivery import (
@@ -37,7 +33,6 @@ console = Console()
 
 
 def load_config() -> dict:
-    # ── Railway / any cloud host ──────────────────────────────
     if os.environ.get("ANTHROPIC_API_KEY"):
         console.print("[dim]Config: environment variables[/dim]")
         return {
@@ -60,10 +55,11 @@ def load_config() -> dict:
             },
             "agent": {
                 "lookback_hours":    int(os.environ.get("LOOKBACK_HOURS", "8")),
-                "max_items_per_run": int(os.environ.get("MAX_ITEMS_PER_RUN", "80")),
+                "max_items_per_run": int(os.environ.get("MAX_ITEMS_PER_RUN", "100")),
                 "digest_schedule":   os.environ.get("DIGEST_SCHEDULE", "weekly"),
                 "digest_day":        os.environ.get("DIGEST_DAY", "monday"),
                 "digest_time":       os.environ.get("DIGEST_TIME", "08:00"),
+                "web_search_queries": int(os.environ.get("WEB_SEARCH_QUERIES", "10")),
             },
             "database": {
                 "postgres": os.environ.get("DATABASE_URL", ""),
@@ -74,7 +70,6 @@ def load_config() -> dict:
             },
         }
 
-    # ── Local config.yaml ─────────────────────────────────────
     import yaml
     config_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -82,7 +77,6 @@ def load_config() -> dict:
     )
     if not os.path.exists(config_path):
         console.print("[red]No ANTHROPIC_API_KEY env var and no config/config.yaml found.[/red]")
-        console.print("[yellow]Copy config/config.example.yaml → config/config.yaml and fill it in.[/yellow]")
         sys.exit(1)
     console.print("[dim]Config: config/config.yaml[/dim]")
     with open(config_path) as f:
@@ -120,14 +114,16 @@ def print_summary_table(items):
     table.add_column("Jur.",    width=6)
     table.add_column("Domain",  width=16)
     table.add_column("Score",   width=6)
-    table.add_column("Title",   width=55)
+    table.add_column("Source",  width=12)
+    table.add_column("Title",   width=45)
     color_map = {"urgent": "red", "notable": "yellow", "monitoring": "dim"}
     for item in sorted(items, key=lambda x: (-x.relevance_score, x.urgency)):
         c = color_map.get(item.urgency, "white")
+        source_tag = "🔍 web" if item.source_id == "web_search" else "📡 feed"
         table.add_row(
             f"[{c}]{item.urgency}[/{c}]",
             item.jurisdiction.upper(), item.domain,
-            str(item.relevance_score), item.title[:55],
+            str(item.relevance_score), source_tag, item.title[:45],
         )
     console.print(table)
 
@@ -148,33 +144,42 @@ def run(args):
     console.rule("[bold]Policy Trend Agent")
     console.print(f"[dim]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/dim]\n")
 
-    config     = load_config()
-    sources    = load_sources(args.jurisdiction)
-    agent_cfg  = config.get("agent", {})
-    email_cfg  = config.get("email", {})
-    tg_cfg     = config.get("telegram", {})
+    config    = load_config()
+    sources   = load_sources(args.jurisdiction)
+    agent_cfg = config.get("agent", {})
+    email_cfg = config.get("email", {})
+    tg_cfg    = config.get("telegram", {})
 
-    lookback_hours = agent_cfg.get("lookback_hours", 8)
-    max_items      = agent_cfg.get("max_items_per_run", 80)
-    min_relevance  = config.get("filters", {}).get("min_relevance_score", 6)
+    lookback_hours     = agent_cfg.get("lookback_hours", 8)
+    max_items          = agent_cfg.get("max_items_per_run", 100)
+    min_relevance      = config.get("filters", {}).get("min_relevance_score", 6)
+    web_search_queries = agent_cfg.get("web_search_queries", 10)
+    api_key            = config["anthropic"]["api_key"]
+    model              = config["anthropic"].get("model", "claude-sonnet-4-20250514")
 
-    # ── 1. COLLECT ───────────────────────────────────────────
-    console.rule("[cyan]1. Collecting")
+    # ── 1. COLLECT — TIER 1: Web search sweep ────────────────
+    console.rule("[cyan]1a. Web Search Sweep (broad)")
+    web_searcher = WebSearchCollector(api_key=api_key, model=model)
+    web_items = web_searcher.collect(max_queries=web_search_queries)
+
+    # ── 1. COLLECT — TIER 2: RSS + scrape sources ─────────────
+    console.rule("[cyan]1b. RSS + Scrape Sources (deep)")
     rss_items     = fetch_all_rss(sources, lookback_hours)
     scraped_items = fetch_all_scraped(sources, lookback_hours)
-    all_raw       = rss_items + scraped_items
-    console.print(f"[green]Raw items: {len(all_raw)}[/green] "
-                  f"(RSS: {len(rss_items)}, Scraped: {len(scraped_items)})")
+
+    all_raw = web_items + rss_items + scraped_items
+    console.print(
+        f"\n[green]Total raw items: {len(all_raw)}[/green] "
+        f"(Web search: {len(web_items)}, RSS: {len(rss_items)}, Scraped: {len(scraped_items)})"
+    )
+
     if not all_raw:
         console.print("[yellow]No new items found. Exiting.[/yellow]")
         return
 
     # ── 2. ANALYSE ───────────────────────────────────────────
     console.rule("[cyan]2. Analysing")
-    analyser = PolicyAnalyser(
-        api_key=config["anthropic"]["api_key"],
-        model=config["anthropic"].get("model", "claude-sonnet-4-20250514"),
-    )
+    analyser = PolicyAnalyser(api_key=api_key, model=model)
     analysed = analyser.analyse_batch(all_raw, min_relevance=min_relevance, max_items=max_items)
     if not analysed:
         console.print("[yellow]No relevant items after analysis.[/yellow]")
@@ -194,7 +199,6 @@ def run(args):
     # ── 4. DELIVER ───────────────────────────────────────────
     console.rule("[cyan]4. Delivering")
 
-    # 4a. Urgent alerts — fire immediately via email + Telegram
     urgent_items = db.get_unnotified(urgency_filter="urgent")
     if urgent_items:
         console.print(f"[red]Sending {len(urgent_items)} urgent alerts...[/red]")
@@ -207,7 +211,6 @@ def run(args):
     else:
         console.print("No urgent items.")
 
-    # 4b. Digest — weekly/daily, or forced with --digest flag
     digest_schedule    = agent_cfg.get("digest_schedule", "weekly")
     should_send_digest = args.digest or _should_send_digest(digest_schedule, agent_cfg)
 
@@ -239,7 +242,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Policy Trend Agent")
-    parser.add_argument("--digest",       action="store_true", help="Force send digest now")
-    parser.add_argument("--jurisdiction", type=str,            help="Filter: sg|au|uk|eu|asean")
-    parser.add_argument("--dry-run",      action="store_true", help="Analyse only, no store/send")
+    parser.add_argument("--digest",       action="store_true")
+    parser.add_argument("--jurisdiction", type=str)
+    parser.add_argument("--dry-run",      action="store_true")
     run(parser.parse_args())
