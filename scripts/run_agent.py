@@ -159,7 +159,8 @@ def run(args):
 
     # ── 1. COLLECT — TIER 1: Web search sweep ────────────────
     console.rule("[cyan]1a. Web Search Sweep (broad)")
-    web_searcher = WebSearchCollector(api_key=api_key, model=model)
+    analyser = PolicyAnalyser(api_key=api_key, model=model)
+    web_searcher = WebSearchCollector(api_key=api_key, model=model, usage=analyser.usage)
     web_items = web_searcher.collect(max_queries=web_search_queries)
 
     # ── 1. COLLECT — TIER 2: RSS + scrape sources ─────────────
@@ -179,7 +180,6 @@ def run(args):
 
     # ── 2. ANALYSE ───────────────────────────────────────────
     console.rule("[cyan]2. Analysing")
-    analyser = PolicyAnalyser(api_key=api_key, model=model)
     analysed = analyser.analyse_batch(all_raw, min_relevance=min_relevance, max_items=max_items)
     if not analysed:
         console.print("[yellow]No relevant items after analysis.[/yellow]")
@@ -237,6 +237,7 @@ def run(args):
         console.print(f"[dim]Digest scheduled for {agent_cfg.get('digest_day','Monday')} — skipping today.[/dim]")
 
     db.close()
+    analyser.print_cost_report()
     console.rule("[green]Done")
 
 

@@ -68,9 +68,10 @@ If no relevant items found, return an empty array: []"""
 
 
 class WebSearchCollector:
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514", usage=None):
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = model
+        self.model  = model
+        self.usage  = usage  # shared TokenUsage object from PolicyAnalyser
 
     def _run_search(self, query: str, jurisdiction: str) -> list[dict]:
         """Run a single web search query via Claude's web_search tool."""
@@ -84,6 +85,9 @@ class WebSearchCollector:
                     "content": f"Search the web for recent news about: {query}\n\nFocus on results from the last 30 days. Return the search results."
                 }]
             )
+
+            if self.usage:
+                self.usage.add(response)
 
             # Extract search results from tool use blocks
             search_results = []
@@ -115,6 +119,8 @@ class WebSearchCollector:
                 max_tokens=1500,
                 messages=[{"role": "user", "content": prompt}]
             )
+            if self.usage:
+                self.usage.add(response)
             raw = response.content[0].text.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
             return json.loads(raw)
