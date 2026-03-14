@@ -19,6 +19,7 @@ from collector.rss_collector import fetch_all_rss
 from collector.scraper import fetch_all_scraped
 from collector.web_search_collector import WebSearchCollector
 from collector.deduplicator import deduplicate
+from collector.prefilter import prefilter
 from analyser.claude_analyser import PolicyAnalyser
 from storage.database import PolicyDatabase
 from delivery.email_delivery import (
@@ -178,13 +179,20 @@ def run(args):
     # Deduplicate across sources before analysis
     all_raw = deduplicate(all_raw)
 
+    # Pre-filter obviously irrelevant items (keyword check, zero API cost)
+    all_raw = prefilter(all_raw)
+
     if not all_raw:
         console.print("[yellow]No new items found. Exiting.[/yellow]")
         return
 
-    # ── 2. ANALYSE ───────────────────────────────────────────
+    # ── 2. ANALYSE + STORE ───────────────────────────────────
     console.rule("[cyan]2. Analysing")
-    analysed = analyser.analyse_batch(all_raw, min_relevance=min_relevance, max_items=max_items)
+    db = get_db(config)
+    # Pass db so analyser can skip already-stored URLs (#3 URL cache)
+    analysed = analyser.analyse_batch(
+        all_raw, min_relevance=min_relevance, max_items=max_items, db=db
+    )
     if not analysed:
         console.print("[yellow]No relevant items after analysis.[/yellow]")
         return
@@ -196,7 +204,6 @@ def run(args):
 
     # ── 3. STORE ─────────────────────────────────────────────
     console.rule("[cyan]3. Storing")
-    db = get_db(config)
     inserted, skipped = db.insert_batch(analysed)
     console.print(f"[green]Inserted: {inserted}[/green] | Skipped (duplicate): {skipped}")
 
