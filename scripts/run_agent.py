@@ -22,10 +22,6 @@ from collector.deduplicator import deduplicate
 from collector.prefilter import prefilter
 from analyser.claude_analyser import PolicyAnalyser
 from storage.database import PolicyDatabase
-from delivery.email_delivery import (
-    send_urgent_alert as email_urgent,
-    send_digest as email_digest,
-)
 from delivery.telegram_delivery import (
     send_urgent_alert as tg_urgent,
     send_digest as tg_digest,
@@ -42,14 +38,7 @@ def load_config() -> dict:
                 "api_key": os.environ["ANTHROPIC_API_KEY"],
                 "model":   os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             },
-            "email": {
-                "enabled":    bool(os.environ.get("SMTP_HOST")),
-                "smtp_host":  os.environ.get("SMTP_HOST", ""),
-                "smtp_port":  int(os.environ.get("SMTP_PORT", "587")),
-                "smtp_user":  os.environ.get("SMTP_USER", ""),
-                "smtp_pass":  os.environ.get("SMTP_PASS", ""),
-                "recipients": [r.strip() for r in os.environ.get("EMAIL_RECIPIENTS", "").split(",") if r.strip()],
-            },
+
             "telegram": {
                 "enabled":   bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
                 "bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
@@ -149,7 +138,6 @@ def run(args):
     config    = load_config()
     sources   = load_sources(args.jurisdiction)
     agent_cfg = config.get("agent", {})
-    email_cfg = config.get("email", {})
     tg_cfg    = config.get("telegram", {})
 
     lookback_hours     = agent_cfg.get("lookback_hours", 8)
@@ -214,8 +202,6 @@ def run(args):
     if urgent_items:
         console.print(f"[red]Sending {len(urgent_items)} urgent alerts...[/red]")
         for item in urgent_items:
-            if email_cfg.get("enabled") and email_cfg.get("recipients"):
-                email_urgent(email_cfg, email_cfg["recipients"], item)
             if tg_cfg.get("enabled") and tg_cfg.get("bot_token"):
                 tg_urgent(tg_cfg["bot_token"], tg_cfg["chat_id"], item)
         db.mark_notified([i["id"] for i in urgent_items])
@@ -230,10 +216,6 @@ def run(args):
         digest_items = db.get_unnotified()
         if digest_items:
             synthesis = analyser.synthesise_trends(analysed)
-
-            if email_cfg.get("enabled") and email_cfg.get("recipients"):
-                email_digest(email_cfg, email_cfg["recipients"], digest_items,
-                             synthesis, period_label=digest_schedule.capitalize())
 
             if tg_cfg.get("enabled") and tg_cfg.get("bot_token"):
                 tg_digest(tg_cfg["bot_token"], tg_cfg["chat_id"], digest_items,
