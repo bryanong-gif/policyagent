@@ -12,6 +12,8 @@ import os
 from datetime import datetime, timezone
 from collector.rss_collector import RawItem
 
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
 
 # Consolidated queries — broader, fewer, more token-efficient
 # Each query covers multiple jurisdictions/topics to reduce total call count
@@ -70,7 +72,7 @@ If nothing relevant found, return: []"""
 
 
 class WebSearchCollector:
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514", usage=None):
+    def __init__(self, api_key: str, model: str = HAIKU_MODEL, usage=None):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model  = model
         self.usage  = usage
@@ -113,7 +115,7 @@ class WebSearchCollector:
                 messages=[{"role": "user", "content": prompt}]
             )
             if self.usage:
-                self.usage.add(response)
+                self.usage.add(response, model=self.model)
 
             # Find the text block containing our JSON
             for block in reversed(response.content):

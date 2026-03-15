@@ -16,26 +16,43 @@ from dataclasses import dataclass
 from typing import Optional
 from collector.rss_collector import RawItem
 
-# Pricing for claude-sonnet-4 (per million tokens)
-INPUT_COST_PER_M  = 3.00
-OUTPUT_COST_PER_M = 15.00
+# Pricing per million tokens
+SONNET_INPUT_COST_PER_M  = 3.00
+SONNET_OUTPUT_COST_PER_M = 15.00
+HAIKU_INPUT_COST_PER_M   = 0.80
+HAIKU_OUTPUT_COST_PER_M  = 4.00
+
+HAIKU_MODEL  = "claude-haiku-4-5-20251001"
+SONNET_MODEL = "claude-sonnet-4-20250514"
 
 
-def _cost(input_tokens: int, output_tokens: int) -> float:
-    return (input_tokens / 1_000_000 * INPUT_COST_PER_M +
-            output_tokens / 1_000_000 * OUTPUT_COST_PER_M)
+def _cost(input_tokens: int, output_tokens: int, model: str = "sonnet") -> float:
+    if "haiku" in model:
+        return (input_tokens / 1_000_000 * HAIKU_INPUT_COST_PER_M +
+                output_tokens / 1_000_000 * HAIKU_OUTPUT_COST_PER_M)
+    return (input_tokens / 1_000_000 * SONNET_INPUT_COST_PER_M +
+            output_tokens / 1_000_000 * SONNET_OUTPUT_COST_PER_M)
 
 
 @dataclass
 class TokenUsage:
-    input_tokens:  int = 0
-    output_tokens: int = 0
-    api_calls:     int = 0
+    input_tokens:        int   = 0
+    output_tokens:       int   = 0
+    api_calls:           int   = 0
+    haiku_input_tokens:  int   = 0
+    haiku_output_tokens: int   = 0
+    haiku_calls:         int   = 0
 
-    def add(self, response):
+    def add(self, response, model: str = "sonnet"):
         if hasattr(response, "usage") and response.usage:
-            self.input_tokens  += getattr(response.usage, "input_tokens",  0)
-            self.output_tokens += getattr(response.usage, "output_tokens", 0)
+            inp = getattr(response.usage, "input_tokens",  0)
+            out = getattr(response.usage, "output_tokens", 0)
+            self.input_tokens  += inp
+            self.output_tokens += out
+            if "haiku" in model:
+                self.haiku_input_tokens  += inp
+                self.haiku_output_tokens += out
+                self.haiku_calls         += 1
         self.api_calls += 1
 
     @property
@@ -43,14 +60,23 @@ class TokenUsage:
         return self.input_tokens + self.output_tokens
 
     @property
+    def sonnet_input_tokens(self) -> int:
+        return self.input_tokens - self.haiku_input_tokens
+
+    @property
+    def sonnet_output_tokens(self) -> int:
+        return self.output_tokens - self.haiku_output_tokens
+
+    @property
     def estimated_cost_usd(self) -> float:
-        return _cost(self.input_tokens, self.output_tokens)
+        sonnet_cost = _cost(self.sonnet_input_tokens, self.sonnet_output_tokens, "sonnet")
+        haiku_cost  = _cost(self.haiku_input_tokens,  self.haiku_output_tokens,  "haiku")
+        return sonnet_cost + haiku_cost
 
     def report(self) -> str:
         return (
-            f"API calls: {self.api_calls} | "
-            f"Tokens: {self.total_tokens:,} "
-            f"(in: {self.input_tokens:,} / out: {self.output_tokens:,}) | "
+            f"API calls: {self.api_calls} (Sonnet: {self.api_calls - self.haiku_calls}, Haiku: {self.haiku_calls}) | "
+            f"Tokens: {self.total_tokens:,} | "
             f"Est. cost: ${self.estimated_cost_usd:.4f}"
         )
 
@@ -154,10 +180,11 @@ class AnalysedItem:
 
 
 class PolicyAnalyser:
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model  = model
-        self.usage  = TokenUsage()
+    def __init__(self, api_key: str, model: str = SONNET_MODEL):
+        self.client       = anthropic.Anthropic(api_key=api_key)
+        self.model        = model        # Sonnet — used for synthesis only
+        self.fast_model   = HAIKU_MODEL  # Haiku — used for pre-score + batch analysis
+        self.usage        = TokenUsage()
 
     # ── Optimisation #3: URL cache ────────────────────────────────────────────
     def filter_seen_urls(self, items: list[RawItem], db) -> list[RawItem]:
@@ -191,12 +218,12 @@ class PolicyAnalyser:
 
             try:
                 response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=200,   # just a short array of numbers
+                    model=self.fast_model,
+                    max_tokens=200,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": prompt}],
                 )
-                self.usage.add(response)
+                self.usage.add(response, model=self.fast_model)
                 raw = response.content[0].text.strip()
                 raw = raw.replace("```json","").replace("```","").strip()
                 scores = json.loads(raw)
@@ -246,12 +273,12 @@ class PolicyAnalyser:
 
             try:
                 response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=batch_size * 350,  # ~350 tokens per item output
+                    model=self.fast_model,
+                    max_tokens=batch_size * 350,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": prompt}],
                 )
-                self.usage.add(response)
+                self.usage.add(response, model=self.fast_model)
 
                 raw = response.content[0].text.strip()
                 raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -305,13 +332,13 @@ Return only JSON."""
         )
         try:
             response = self.client.messages.create(
-                model=self.model, max_tokens=400, system=SYSTEM_PROMPT,
+                model=self.fast_model, max_tokens=400, system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": SINGLE_PROMPT.format(
                     title=item.title, source=item.source_id,
                     jurisdiction=item.jurisdiction.upper(), content=content
                 )}],
             )
-            self.usage.add(response)
+            self.usage.add(response, model=self.fast_model)
             raw = response.content[0].text.strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -399,21 +426,21 @@ Return only JSON."""
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
-            self.usage.add(response)
+            self.usage.add(response, model=self.model)
             return response.content[0].text.strip()
         except Exception as e:
             return f"Trend synthesis failed: {e}"
 
     def print_cost_report(self):
-        runs_per_month = 2 * 30  # 2 runs/day at 12h cycle
+        runs_per_month = 2 * 30
+        u = self.usage
         print(f"\n{'='*60}")
         print(f"  COST REPORT")
         print(f"{'='*60}")
-        print(f"  Model:         {self.model}")
-        print(f"  API calls:     {self.usage.api_calls}")
-        print(f"  Input tokens:  {self.usage.input_tokens:,}")
-        print(f"  Output tokens: {self.usage.output_tokens:,}")
-        print(f"  Total tokens:  {self.usage.total_tokens:,}")
-        print(f"  Est. cost:     ${self.usage.estimated_cost_usd:.4f} USD")
-        print(f"  Monthly est.:  ${self.usage.estimated_cost_usd * runs_per_month:.2f} USD ({runs_per_month} runs/month)")
+        print(f"  Sonnet calls:  {u.api_calls - u.haiku_calls} | tokens: {u.sonnet_input_tokens + u.sonnet_output_tokens:,}")
+        print(f"  Haiku calls:   {u.haiku_calls} | tokens: {u.haiku_input_tokens + u.haiku_output_tokens:,}")
+        print(f"  Total calls:   {u.api_calls}")
+        print(f"  Total tokens:  {u.total_tokens:,}")
+        print(f"  Est. cost:     ${u.estimated_cost_usd:.4f} USD")
+        print(f"  Monthly est.:  ${u.estimated_cost_usd * runs_per_month:.2f} USD ({runs_per_month} runs/month)")
         print(f"{'='*60}\n")

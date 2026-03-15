@@ -150,7 +150,7 @@ def run(args):
     # ── 1. COLLECT — TIER 1: Web search sweep ────────────────
     console.rule("[cyan]1a. Web Search Sweep (broad)")
     analyser = PolicyAnalyser(api_key=api_key, model=model)
-    web_searcher = WebSearchCollector(api_key=api_key, model=model, usage=analyser.usage)
+    web_searcher = WebSearchCollector(api_key=api_key, usage=analyser.usage)  # uses Haiku by default
     web_items = web_searcher.collect(max_queries=web_search_queries)
 
     # ── 1. COLLECT — TIER 2: RSS + scrape sources ─────────────
