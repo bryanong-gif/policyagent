@@ -22,11 +22,6 @@ SEARCH_QUERIES = [
         "domain": ["ai_safety", "online_safety", "tech_governance"]
     },
     {
-        "q": "EU AI Act DSA GDPR enforcement digital regulation 2026",
-        "jurisdiction": "eu",
-        "domain": ["ai_safety", "online_safety", "tech_governance"]
-    },
-    {
         "q": "UK Australia AI safety online safety regulation enforcement 2026",
         "jurisdiction": "global",
         "domain": ["ai_safety", "online_safety", "tech_governance"]
@@ -45,6 +40,11 @@ SEARCH_QUERIES = [
         "q": "online safety social media content moderation law 2026",
         "jurisdiction": "global",
         "domain": ["online_safety", "tech_governance"]
+    },
+    {
+        "q": "EU AI Act DSA GDPR enforcement digital regulation 2026",
+        "jurisdiction": "eu",
+        "domain": ["ai_safety", "online_safety", "tech_governance"]
     },
 ]
 
