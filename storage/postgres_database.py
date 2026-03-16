@@ -98,7 +98,12 @@ class PolicyDatabasePG:
             cur.execute(
                 """INSERT INTO digests (period_start, period_end, item_count, synthesis)
                    VALUES (%s,%s,%s,%s)""",
-                (period_start, period_end, item_count, synthesis),
+                (
+                    None if not period_start else period_start,
+                    None if not period_end else period_end,
+                    item_count,
+                    synthesis,
+                ),
             )
         self.conn.commit()
 
