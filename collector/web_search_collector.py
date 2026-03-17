@@ -1,9 +1,12 @@
 # collector/web_search_collector.py
 """
-Tier 1 — Broad web search sweep using Claude's web_search tool.
-Cost-optimised: search + extract in ONE call per query (not two).
-Truncates results aggressively to minimise input tokens.
-Runs every other cycle (every 12h) to halve frequency cost.
+Tier 1 — Broad web search sweep with trusted source verification.
+
+Flow per item found:
+  1. Web search finds item from ANY source
+  2. Verify: search for same story on trusted sources
+  3. If trusted source found → use trusted URL + mark verified
+  4. If not found → keep original but flag as unverified
 """
 
 import anthropic
@@ -14,9 +17,47 @@ from collector.rss_collector import RawItem
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
+# ── Trusted source domains ────────────────────────────────────────────────────
+# Items from these domains are accepted without verification.
+# Items from other domains trigger a verification search.
+TRUSTED_DOMAINS = {
+    # International news wires
+    "reuters.com", "apnews.com", "bloomberg.com", "ft.com",
+    "wsj.com", "nytimes.com", "theguardian.com", "bbc.com", "bbc.co.uk",
+    "axios.com", "politico.com", "politico.eu", "economist.com",
+    "wired.com", "technologyreview.com", "techcrunch.com",
+    "arstechnica.com", "theregister.com",
 
-# Consolidated queries — broader, fewer, more token-efficient
-# Each query covers multiple jurisdictions/topics to reduce total call count
+    # SG news
+    "straitstimes.com", "channelnewsasia.com", "todayonline.com",
+    "businesstimes.com.sg",
+
+    # EU/UK news
+    "euractiv.com", "elpais.com", "lemonde.fr",
+
+    # Official government / regulatory
+    "gov.sg", "imda.gov.sg", "pdpc.gov.sg", "mas.gov.sg",
+    "csa.gov.sg", "tech.gov.sg", "smartnation.gov.sg",
+    "gov.uk", "ofcom.org.uk", "ico.org.uk",
+    "gov.au", "acma.gov.au", "oaic.gov.au", "esafety.gov.au",
+    "europa.eu", "ec.europa.eu", "edpb.europa.eu", "enisa.europa.eu",
+    "asean.org", "oecd.org", "oecd.ai",
+
+    # Think tanks & academic
+    "brookings.edu", "rand.org", "chathamhouse.org", "csis.org",
+    "adalovelaceinstitute.org", "ainowinstitute.org", "futureoflife.org",
+    "techpolicy.press", "algorithmwatch.org", "accessnow.org",
+    "ceps.eu", "edri.org", "lkyspp.nus.edu.sg",
+
+    # Legal / policy
+    "lexology.com", "iapp.org", "linklaters.com", "dlapiper.com",
+    "herbertsmithfreehills.com", "bird-bird.com",
+
+    # Additional trusted news
+    "washingtonpost.com", "theatlantic.com", "abc.net.au",
+    "businesstimes.com.sg", "scmp.com", "nikkei.com",
+}
+
 SEARCH_QUERIES = [
     {
         "q": "Singapore AI online safety tech governance regulation news 2026",
@@ -50,25 +91,64 @@ SEARCH_QUERIES = [
     },
 ]
 
-# Single combined prompt — search AND extract in one call
+# Step 1 — broad search, any source
 COMBINED_PROMPT = """Search the web for recent news (last 14 days) about: {query}
 
-After searching, extract up to 4 relevant policy/regulatory items from the results.
+Extract up to 4 relevant policy/regulatory items.
 Only include: new laws, consultations, enforcement actions, guidance, significant reports.
 Ignore: opinion pieces, duplicates, unrelated news.
 
-Return ONLY a JSON array, no markdown, no explanation:
+Return ONLY a JSON array, no markdown:
 [
   {{
     "title": "exact headline",
     "url": "https://...",
-    "summary": "1 sentence: what happened and why it matters for online safety/AI/tech governance",
+    "summary": "1 sentence: what happened and why it matters",
     "jurisdiction": "sg|au|uk|eu|asean|global",
     "domain": "online_safety|ai_safety|tech_governance|other"
   }}
 ]
 
 If nothing relevant found, return: []"""
+
+# Step 2 — batch verification of ALL unverified items in ONE call
+BATCH_VERIFY_PROMPT = """Search the web to verify each of these stories on trusted sources.
+Trusted sources include: Reuters, AP, Bloomberg, FT, BBC, Guardian, NYT, Washington Post,
+The Atlantic, Axios, Politico, CNA, Straits Times, Business Times, ABC Australia,
+official .gov sites, europa.eu, or established think tanks.
+
+Stories to verify:
+{stories}
+
+Return a JSON array with one object per story, in the same order:
+[
+  {{
+    "found": true,
+    "trusted_url": "https://...",
+    "trusted_source": "Reuters",
+    "title": "headline from trusted source"
+  }},
+  {{
+    "found": false
+  }}
+]
+
+Return only the JSON array, no explanation."""
+
+
+def _get_domain(url: str) -> str:
+    """Extract domain from URL."""
+    try:
+        from urllib.parse import urlparse
+        return urlparse(url).netloc.lower().replace("www.", "")
+    except Exception:
+        return ""
+
+
+def _is_trusted(url: str) -> bool:
+    """Check if URL is from a trusted domain."""
+    domain = _get_domain(url)
+    return any(domain == td or domain.endswith("." + td) for td in TRUSTED_DOMAINS)
 
 
 class WebSearchCollector:
@@ -78,106 +158,168 @@ class WebSearchCollector:
         self.usage  = usage
 
     def _should_run(self) -> bool:
-        """
-        Run web search every other agent cycle (~every 12h) to halve cost.
-        Uses a simple file-based flag. On Railway, resets each deploy.
-        Set WEB_SEARCH_EVERY_RUN=true to always run.
-        """
         if os.environ.get("WEB_SEARCH_EVERY_RUN", "").lower() == "true":
             return True
-
         flag_path = "/tmp/web_search_last_run"
         try:
             if os.path.exists(flag_path):
                 with open(flag_path) as f:
                     last = int(f.read().strip())
-                now = int(datetime.now().timestamp())
-                if now - last < 3600 * 10:   # less than 10h ago → skip
-                    print("[Web Search] Skipping this cycle (ran recently). Set WEB_SEARCH_EVERY_RUN=true to override.")
+                if int(datetime.now().timestamp()) - last < 3600 * 10:
+                    print("[Web Search] Skipping this cycle (ran recently).")
                     return False
         except Exception:
             pass
-
         with open(flag_path, "w") as f:
             f.write(str(int(datetime.now().timestamp())))
         return True
 
     def _search_and_extract(self, q_config: dict) -> list[dict]:
-        """Single API call: search the web and extract items in one shot."""
-        query      = q_config["q"]
-        prompt     = COMBINED_PROMPT.format(query=query)
-
+        """Step 1: broad search, any source."""
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=800,          # tight cap — JSON output only
+                max_tokens=800,
                 tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": COMBINED_PROMPT.format(query=q_config["q"])}]
             )
             if self.usage:
                 self.usage.add(response, model=self.model)
 
-            # Find the text block containing our JSON
-            for block in reversed(response.content):
-                if hasattr(block, "text") and block.text.strip().startswith("["):
-                    raw = block.text.strip()
-                    raw = raw.replace("```json", "").replace("```", "").strip()
-                    return json.loads(raw)
-
-            # Fallback: try last text block anyway
             for block in reversed(response.content):
                 if hasattr(block, "text"):
-                    raw = block.text.strip()
-                    raw = raw.replace("```json", "").replace("```", "").strip()
+                    raw = block.text.strip().replace("```json","").replace("```","").strip()
                     if raw.startswith("["):
                         return json.loads(raw)
-
-            return []
-
-        except json.JSONDecodeError:
-            print(f"    [WARN] JSON parse error for query: {query[:50]}")
             return []
         except Exception as e:
-            print(f"    [WARN] Web search failed for '{query[:50]}': {e}")
+            print(f"    [WARN] Search failed: {e}")
             return []
 
-    def collect(self, max_queries: int = 6) -> list[RawItem]:
-        """Run web search queries. Returns RawItems merged with RSS pool."""
+    def _verify_batch(self, items: list[dict]) -> list[dict]:
+        """
+        Step 2: verify ALL unverified items in a single API call (cost optimised).
+        Trusted items pass through immediately. Only untrusted items are batched.
+        """
+        # Split into trusted (pass-through) and needs-verification
+        trusted_items   = []
+        unverified_items = []
+
+        for item in items:
+            url = item.get("url", "")
+            if _is_trusted(url):
+                item["verified"]       = True
+                item["trusted_source"] = _get_domain(url)
+                trusted_items.append(item)
+            else:
+                unverified_items.append(item)
+
+        if not unverified_items:
+            return trusted_items
+
+        # Batch verify all untrusted items in ONE API call
+        stories = "\n".join(
+            f"{i+1}. {item.get('title','')}"
+            for i, item in enumerate(unverified_items)
+        )
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=600,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=[{"role": "user", "content": BATCH_VERIFY_PROMPT.format(stories=stories)}]
+            )
+            if self.usage:
+                self.usage.add(response, model=self.model)
+
+            for block in reversed(response.content):
+                if hasattr(block, "text"):
+                    raw = block.text.strip().replace("```json","").replace("```","").strip()
+                    if raw.startswith("["):
+                        results = json.loads(raw)
+                        for item, result in zip(unverified_items, results):
+                            if result.get("found"):
+                                item["url"]            = result.get("trusted_url", item["url"])
+                                item["verified"]       = True
+                                item["trusted_source"] = result.get("trusted_source", "")
+                                item["title"]          = result.get("title", item["title"])
+                                print(f"    ✓ Verified: {item['title'][:50]} [{item['trusted_source']}]")
+                            else:
+                                item["verified"]       = False
+                                item["trusted_source"] = _get_domain(item.get("url",""))
+                                print(f"    ~ Unverified: {item['title'][:50]}")
+                        break
+
+        except Exception as e:
+            print(f"    [WARN] Batch verification failed: {e}")
+            for item in unverified_items:
+                item["verified"]       = False
+                item["trusted_source"] = _get_domain(item.get("url",""))
+
+        return trusted_items + unverified_items
+
+    def collect(self, max_queries: int = 5) -> list[RawItem]:
         if not self._should_run():
             return []
 
-        all_items = []
-        seen_urls = set()
-        queries   = SEARCH_QUERIES[:max_queries]
+        all_items  = []
+        seen_urls  = set()
+        queries    = SEARCH_QUERIES[:max_queries]
+        verified   = 0
+        unverified = 0
 
-        print(f"\n[Web Search] Running {len(queries)} combined search+extract queries...")
+        print(f"\n[Web Search] Running {len(queries)} queries with trusted source verification...")
 
         for q_config in queries:
             print(f"  → {q_config['q'][:65]}...")
             extracted = self._search_and_extract(q_config)
-            new = 0
 
+            # Dedupe by URL before verification
+            fresh = []
             for item in extracted:
                 url = item.get("url", "").strip()
-                if not url or url in seen_urls:
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    fresh.append(item)
+
+            if not fresh:
+                continue
+
+            # Batch verify all items from this query in ONE call
+            print(f"    Verifying {len(fresh)} items...")
+            verified_items = self._verify_batch(fresh)
+
+            for item in verified_items:
+                final_url = item.get("url", "").strip()
+                if not final_url:
                     continue
-                seen_urls.add(url)
+                # Add upgraded URL to seen set
+                seen_urls.add(final_url)
+
                 title = item.get("title", "").strip()
                 if not title:
                     continue
 
+                source_id = "web_search_verified" if item.get("verified") else "web_search_unverified"
+                if item.get("verified"):
+                    verified += 1
+                else:
+                    unverified += 1
+
+                trust_note = f"[{item.get('trusted_source', '')}]" if item.get("trusted_source") else ""
+                summary = f"{trust_note} {item.get('summary', '')}".strip()
+
                 all_items.append(RawItem(
-                    source_id="web_search",
+                    source_id=source_id,
                     title=title,
-                    url=url,
+                    url=final_url,
                     published=datetime.now(timezone.utc),
-                    summary=item.get("summary", "").strip()[:600],
+                    summary=summary[:600],
                     jurisdiction=item.get("jurisdiction", q_config["jurisdiction"]),
                     domains=q_config["domain"],
                 ))
-                new += 1
 
-            print(f"     {new} items extracted")
-
-        print(f"[Web Search] Total: {len(all_items)} unique items\n")
+        print(f"[Web Search] Total: {len(all_items)} items "
+              f"(verified: {verified}, unverified: {unverified})\n")
         return all_items

@@ -110,7 +110,12 @@ def print_summary_table(items):
     color_map = {"urgent": "red", "notable": "yellow", "monitoring": "dim"}
     for item in sorted(items, key=lambda x: (-x.relevance_score, x.urgency)):
         c = color_map.get(item.urgency, "white")
-        source_tag = "🔍 web" if item.source_id == "web_search" else "📡 feed"
+        if item.source_id == "web_search_verified":
+            source_tag = "✓ web"
+        elif item.source_id == "web_search_unverified":
+            source_tag = "? web"
+        else:
+            source_tag = "📡 feed"
         table.add_row(
             f"[{c}]{item.urgency}[/{c}]",
             item.jurisdiction.upper(), item.domain,
@@ -127,7 +132,10 @@ def _should_send_digest(schedule, agent_cfg):
     if schedule == "weekly":
         day_map = {"monday":0,"tuesday":1,"wednesday":2,"thursday":3,
                    "friday":4,"saturday":5,"sunday":6}
-        return now.weekday() == day_map.get(agent_cfg.get("digest_day","monday").lower(), 0)
+        correct_day = now.weekday() == day_map.get(agent_cfg.get("digest_day","monday").lower(), 0)
+        h, m = map(int, agent_cfg.get("digest_time", "08:00").split(":"))
+        correct_time = now.hour == h and now.minute < 30
+        return correct_day and correct_time
     return False
 
 
