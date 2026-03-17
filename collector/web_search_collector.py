@@ -1,12 +1,13 @@
 # collector/web_search_collector.py
 """
-Tier 1 — Broad web search sweep with trusted source verification.
+Tier 1 — Broad web search with trusted source verification.
+Cost optimised: batch verification (all items per query in ONE call).
 
-Flow per item found:
-  1. Web search finds item from ANY source
-  2. Verify: search for same story on trusted sources
-  3. If trusted source found → use trusted URL + mark verified
-  4. If not found → keep original but flag as unverified
+Flow:
+  1. Search finds items from any source
+  2. Items already from trusted domains pass through immediately
+  3. Remaining items verified in one batch call per query
+  4. Verified items get upgraded URL; unverified are flagged
 """
 
 import anthropic
@@ -17,14 +18,12 @@ from collector.rss_collector import RawItem
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-# ── Trusted source domains ────────────────────────────────────────────────────
-# Items from these domains are accepted without verification.
-# Items from other domains trigger a verification search.
 TRUSTED_DOMAINS = {
-    # International news wires
+    # International news wires & outlets
     "reuters.com", "apnews.com", "bloomberg.com", "ft.com",
     "wsj.com", "nytimes.com", "theguardian.com", "bbc.com", "bbc.co.uk",
     "axios.com", "politico.com", "politico.eu", "economist.com",
+    "washingtonpost.com", "theatlantic.com",
     "wired.com", "technologyreview.com", "techcrunch.com",
     "arstechnica.com", "theregister.com",
 
@@ -32,8 +31,11 @@ TRUSTED_DOMAINS = {
     "straitstimes.com", "channelnewsasia.com", "todayonline.com",
     "businesstimes.com.sg",
 
-    # EU/UK news
-    "euractiv.com", "elpais.com", "lemonde.fr",
+    # Regional / international
+    "scmp.com", "nikkei.com", "abc.net.au",
+
+    # EU / UK news
+    "euractiv.com",
 
     # Official government / regulatory
     "gov.sg", "imda.gov.sg", "pdpc.gov.sg", "mas.gov.sg",
@@ -51,11 +53,6 @@ TRUSTED_DOMAINS = {
 
     # Legal / policy
     "lexology.com", "iapp.org", "linklaters.com", "dlapiper.com",
-    "herbertsmithfreehills.com", "bird-bird.com",
-
-    # Additional trusted news
-    "washingtonpost.com", "theatlantic.com", "abc.net.au",
-    "businesstimes.com.sg", "scmp.com", "nikkei.com",
 }
 
 SEARCH_QUERIES = [
@@ -91,7 +88,6 @@ SEARCH_QUERIES = [
     },
 ]
 
-# Step 1 — broad search, any source
 COMBINED_PROMPT = """Search the web for recent news (last 14 days) about: {query}
 
 Extract up to 4 relevant policy/regulatory items.
@@ -111,16 +107,15 @@ Return ONLY a JSON array, no markdown:
 
 If nothing relevant found, return: []"""
 
-# Step 2 — batch verification of ALL unverified items in ONE call
-BATCH_VERIFY_PROMPT = """Search the web to verify each of these stories on trusted sources.
-Trusted sources include: Reuters, AP, Bloomberg, FT, BBC, Guardian, NYT, Washington Post,
+BATCH_VERIFY_PROMPT = """Search the web to find trusted source coverage for each story below.
+Trusted sources: Reuters, AP, Bloomberg, FT, BBC, Guardian, NYT, Washington Post,
 The Atlantic, Axios, Politico, CNA, Straits Times, Business Times, ABC Australia,
-official .gov sites, europa.eu, or established think tanks.
+official .gov sites, europa.eu, OECD, or established think tanks.
 
 Stories to verify:
 {stories}
 
-Return a JSON array with one object per story, in the same order:
+Return a JSON array with one result per story in the same order:
 [
   {{
     "found": true,
@@ -137,7 +132,6 @@ Return only the JSON array, no explanation."""
 
 
 def _get_domain(url: str) -> str:
-    """Extract domain from URL."""
     try:
         from urllib.parse import urlparse
         return urlparse(url).netloc.lower().replace("www.", "")
@@ -146,7 +140,6 @@ def _get_domain(url: str) -> str:
 
 
 def _is_trusted(url: str) -> bool:
-    """Check if URL is from a trusted domain."""
     domain = _get_domain(url)
     return any(domain == td or domain.endswith("." + td) for td in TRUSTED_DOMAINS)
 
@@ -174,21 +167,19 @@ class WebSearchCollector:
             f.write(str(int(datetime.now().timestamp())))
         return True
 
-    def _search_and_extract(self, q_config: dict) -> list[dict]:
-        """Step 1: broad search, any source."""
+    def _search_and_extract(self, query: str) -> list[dict]:
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=800,
                 tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=[{"role": "user", "content": COMBINED_PROMPT.format(query=q_config["q"])}]
+                messages=[{"role": "user", "content": COMBINED_PROMPT.format(query=query)}]
             )
             if self.usage:
                 self.usage.add(response, model=self.model)
-
             for block in reversed(response.content):
                 if hasattr(block, "text"):
-                    raw = block.text.strip().replace("```json","").replace("```","").strip()
+                    raw = block.text.strip().replace("```json", "").replace("```", "").strip()
                     if raw.startswith("["):
                         return json.loads(raw)
             return []
@@ -197,30 +188,22 @@ class WebSearchCollector:
             return []
 
     def _verify_batch(self, items: list[dict]) -> list[dict]:
-        """
-        Step 2: verify ALL unverified items in a single API call (cost optimised).
-        Trusted items pass through immediately. Only untrusted items are batched.
-        """
-        # Split into trusted (pass-through) and needs-verification
-        trusted_items   = []
-        unverified_items = []
-
+        """Verify all untrusted items in ONE API call."""
+        trusted, unverified = [], []
         for item in items:
-            url = item.get("url", "")
-            if _is_trusted(url):
+            if _is_trusted(item.get("url", "")):
                 item["verified"]       = True
-                item["trusted_source"] = _get_domain(url)
-                trusted_items.append(item)
+                item["trusted_source"] = _get_domain(item["url"])
+                trusted.append(item)
             else:
-                unverified_items.append(item)
+                unverified.append(item)
 
-        if not unverified_items:
-            return trusted_items
+        if not unverified:
+            return trusted
 
-        # Batch verify all untrusted items in ONE API call
         stories = "\n".join(
-            f"{i+1}. {item.get('title','')}"
-            for i, item in enumerate(unverified_items)
+            f"{i+1}. {item.get('title', '')}"
+            for i, item in enumerate(unverified)
         )
 
         try:
@@ -235,29 +218,28 @@ class WebSearchCollector:
 
             for block in reversed(response.content):
                 if hasattr(block, "text"):
-                    raw = block.text.strip().replace("```json","").replace("```","").strip()
+                    raw = block.text.strip().replace("```json", "").replace("```", "").strip()
                     if raw.startswith("["):
                         results = json.loads(raw)
-                        for item, result in zip(unverified_items, results):
+                        for item, result in zip(unverified, results):
                             if result.get("found"):
                                 item["url"]            = result.get("trusted_url", item["url"])
                                 item["verified"]       = True
                                 item["trusted_source"] = result.get("trusted_source", "")
                                 item["title"]          = result.get("title", item["title"])
-                                print(f"    ✓ Verified: {item['title'][:50]} [{item['trusted_source']}]")
+                                print(f"    ✓ Verified [{item['trusted_source']}]: {item['title'][:50]}")
                             else:
                                 item["verified"]       = False
-                                item["trusted_source"] = _get_domain(item.get("url",""))
+                                item["trusted_source"] = _get_domain(item.get("url", ""))
                                 print(f"    ~ Unverified: {item['title'][:50]}")
                         break
-
         except Exception as e:
             print(f"    [WARN] Batch verification failed: {e}")
-            for item in unverified_items:
+            for item in unverified:
                 item["verified"]       = False
-                item["trusted_source"] = _get_domain(item.get("url",""))
+                item["trusted_source"] = _get_domain(item.get("url", ""))
 
-        return trusted_items + unverified_items
+        return trusted + unverified
 
     def collect(self, max_queries: int = 5) -> list[RawItem]:
         if not self._should_run():
@@ -273,9 +255,9 @@ class WebSearchCollector:
 
         for q_config in queries:
             print(f"  → {q_config['q'][:65]}...")
-            extracted = self._search_and_extract(q_config)
+            extracted = self._search_and_extract(q_config["q"])
 
-            # Dedupe by URL before verification
+            # Dedupe before verification
             fresh = []
             for item in extracted:
                 url = item.get("url", "").strip()
@@ -284,22 +266,17 @@ class WebSearchCollector:
                     fresh.append(item)
 
             if not fresh:
+                print(f"     0 new items")
                 continue
 
-            # Batch verify all items from this query in ONE call
             print(f"    Verifying {len(fresh)} items...")
-            verified_items = self._verify_batch(fresh)
+            verified_batch = self._verify_batch(fresh)
 
-            for item in verified_items:
+            for item in verified_batch:
                 final_url = item.get("url", "").strip()
-                if not final_url:
+                if not final_url or not item.get("title", "").strip():
                     continue
-                # Add upgraded URL to seen set
                 seen_urls.add(final_url)
-
-                title = item.get("title", "").strip()
-                if not title:
-                    continue
 
                 source_id = "web_search_verified" if item.get("verified") else "web_search_unverified"
                 if item.get("verified"):
@@ -307,12 +284,12 @@ class WebSearchCollector:
                 else:
                     unverified += 1
 
-                trust_note = f"[{item.get('trusted_source', '')}]" if item.get("trusted_source") else ""
-                summary = f"{trust_note} {item.get('summary', '')}".strip()
+                trust_note = f"[{item['trusted_source']}] " if item.get("trusted_source") else ""
+                summary = f"{trust_note}{item.get('summary', '')}".strip()
 
                 all_items.append(RawItem(
                     source_id=source_id,
-                    title=title,
+                    title=item["title"].strip(),
                     url=final_url,
                     published=datetime.now(timezone.utc),
                     summary=summary[:600],
@@ -321,5 +298,5 @@ class WebSearchCollector:
                 ))
 
         print(f"[Web Search] Total: {len(all_items)} items "
-              f"(verified: {verified}, unverified: {unverified})\n")
+              f"(✓ verified: {verified}, ~ unverified: {unverified})\n")
         return all_items
