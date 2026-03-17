@@ -47,7 +47,7 @@ def send_urgent_alert(bot_token: str, chat_id: str, item: sqlite3.Row):
     domain_label = (item["domain"] or "").replace("_", " ").title()
 
     text = (
-        f"🔴 <b>Urgent Policy Alert</b>\n\n"
+        f"🔴 <b>Urgent Update</b>\n\n"
         f"{flag} <b>{item['jurisdiction'].upper()}</b> · {domain_label}\n\n"
         f"<b><a href='{item['url']}'>{item['title']}</a></b>\n\n"
         f"{item['summary'] or ''}\n\n"
