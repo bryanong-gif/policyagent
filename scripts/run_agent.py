@@ -189,21 +189,26 @@ def run(args):
     analysed = analyser.analyse_batch(
         all_raw, min_relevance=min_relevance, max_items=max_items, db=db
     )
-    if not analysed:
-        console.print("[yellow]No relevant items after analysis.[/yellow]")
-        return
-    print_summary_table(analysed)
+    if analysed:
+        print_summary_table(analysed)
+    else:
+        console.print("[yellow]No new relevant items from today's collection.[/yellow]")
 
     if args.dry_run:
         console.print("\n[yellow]Dry run — not storing or sending.[/yellow]")
+        db.close()
         return
 
     # ── 3. STORE ─────────────────────────────────────────────
     console.rule("[cyan]3. Storing")
-    inserted, skipped = db.insert_batch(analysed)
-    console.print(f"[green]Inserted: {inserted}[/green] | Skipped (duplicate): {skipped}")
+    if analysed:
+        inserted, skipped = db.insert_batch(analysed)
+        console.print(f"[green]Inserted: {inserted}[/green] | Skipped (duplicate): {skipped}")
+    else:
+        console.print("[dim]Nothing new to store.[/dim]")
 
     # ── 4. DELIVER ───────────────────────────────────────────
+    # Always runs — digest and alerts check DB, not just today's items
     console.rule("[cyan]4. Delivering")
 
     urgent_items = db.get_unnotified(urgency_filter="urgent")
@@ -223,7 +228,9 @@ def run(args):
         console.print("\n[bold]Generating trend synthesis and digest...[/bold]")
         digest_items = db.get_unnotified()
         if digest_items:
-            synthesis = analyser.synthesise_trends(analysed)
+            # Use today's analysed items for synthesis if available, else query recent DB items
+            synthesis_items = analysed if analysed else []
+            synthesis = analyser.synthesise_trends(synthesis_items) if synthesis_items else "Weekly digest — see items below."
 
             if tg_cfg.get("enabled") and tg_cfg.get("bot_token"):
                 tg_digest(tg_cfg["bot_token"], tg_cfg["chat_id"], digest_items,
