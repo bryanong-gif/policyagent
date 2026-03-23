@@ -79,14 +79,6 @@ sources:
     date_selector: "time"
 
   # SG News Media
-  - id: sg_straits_times_tech
-    name: "Straits Times Tech"
-    url: "https://www.straitstimes.com/rss/singapore"
-    type: rss
-    jurisdiction: sg
-    domain: [online_safety, ai_safety, tech_governance]
-    keywords_filter: ["AI", "artificial intelligence", "data", "digital", "cyber", "online safety", "regulation", "privacy", "tech policy"]
-
   - id: sg_cna_tech
     name: "CNA Tech"
     url: "https://www.channelnewsasia.com/rssfeeds/8395986"
