@@ -132,10 +132,7 @@ def _should_send_digest(schedule, agent_cfg):
     if schedule == "weekly":
         day_map = {"monday":0,"tuesday":1,"wednesday":2,"thursday":3,
                    "friday":4,"saturday":5,"sunday":6}
-        correct_day = now.weekday() == day_map.get(agent_cfg.get("digest_day","monday").lower(), 0)
-        h, m = map(int, agent_cfg.get("digest_time", "08:00").split(":"))
-        correct_time = now.hour == h and now.minute < 30
-        return correct_day and correct_time
+        return now.weekday() == day_map.get(agent_cfg.get("digest_day","monday").lower(), 0)
     return False
 
 
