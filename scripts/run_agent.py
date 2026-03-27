@@ -225,9 +225,19 @@ def run(args):
         console.print("\n[bold]Generating trend synthesis and digest...[/bold]")
         digest_items = db.get_unnotified()
         if digest_items:
-            # Use today's analysed items for synthesis if available, else query recent DB items
-            synthesis_items = analysed if analysed else []
-            synthesis = analyser.synthesise_trends(synthesis_items) if synthesis_items else "Weekly digest — see items below."
+            # Synthesise across ALL unnotified items (full week), not just today's
+            from analyser.claude_analyser import AnalysedItem
+            # Convert DB rows to AnalysedItem-like objects for synthesiser
+            class _Row:
+                def __init__(self, row):
+                    self.title        = row["title"]
+                    self.jurisdiction = row["jurisdiction"]
+                    self.domain       = row["domain"]
+                    self.urgency      = row["urgency"]
+                    self.summary      = row["summary"] or ""
+                    self.published    = row["created_at"]
+            synthesis_items = [_Row(r) for r in digest_items]
+            synthesis = analyser.synthesise_trends(synthesis_items)
 
             if tg_cfg.get("enabled") and tg_cfg.get("bot_token"):
                 tg_digest(tg_cfg["bot_token"], tg_cfg["chat_id"], digest_items,
