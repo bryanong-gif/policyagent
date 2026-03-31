@@ -1,12 +1,10 @@
 # config/sources.yaml
 # Cleaned and verified — March 2026
-# type: rss   → fetched via feedparser
-# type: scrape → fetched via BeautifulSoup
 
 sources:
 
   # ─────────────────────────────────────────────
-  # SINGAPORE — GOV / REGULATOR
+  # SINGAPORE — GOV / REGULATOR (always trusted, skip pre-score)
   # ─────────────────────────────────────────────
   - id: sg_imda_news
     name: "IMDA News"
@@ -14,6 +12,7 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [online_safety, ai_safety, tech_governance]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -24,6 +23,7 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [tech_governance, online_safety]
+    trusted: true
     selector: "div.news-item"
     link_selector: "a"
     date_selector: "span.date"
@@ -34,6 +34,7 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [tech_governance, ai_safety]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -44,6 +45,7 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [online_safety, tech_governance]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -54,6 +56,7 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [ai_safety, tech_governance]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -64,28 +67,20 @@ sources:
     type: scrape
     jurisdiction: sg
     domain: [online_safety, tech_governance, ai_safety]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
 
-  - id: sg_smartnation_news
-    name: "Smart Nation Initiatives"
-    url: "https://www.smartnation.gov.sg/initiatives/"
-    type: scrape
-    jurisdiction: sg
-    domain: [ai_safety, tech_governance]
-    selector: "article"
-    link_selector: "a"
-    date_selector: "time"
-
-  # SG News Media
+  # SG News Media (general — needs pre-score)
   - id: sg_cna_tech
     name: "CNA Tech"
     url: "https://www.channelnewsasia.com/rssfeeds/8395986"
     type: rss
     jurisdiction: sg
     domain: [online_safety, ai_safety, tech_governance]
-    keywords_filter: ["AI", "artificial intelligence", "data", "digital", "cyber", "regulation", "privacy", "tech policy"]
+    trusted: false
+    keywords_filter: ["AI regulation", "artificial intelligence law", "online safety law", "data protection", "cyber regulation", "PDPA", "IMDA", "MDDI", "MAS fintech", "tech policy", "digital governance"]
 
   - id: sg_businesstimes_tech
     name: "Business Times Tech"
@@ -93,15 +88,17 @@ sources:
     type: rss
     jurisdiction: sg
     domain: [tech_governance, ai_safety]
-    keywords_filter: ["AI", "regulation", "data", "digital", "policy", "cyber"]
+    trusted: false
+    keywords_filter: ["AI regulation", "data protection", "digital policy", "cyber law", "fintech regulation", "PDPA", "MAS", "IMDA"]
 
-  # SG Think Tanks
+  # SG Think Tanks (trusted)
   - id: sg_rsis_commentary
     name: "RSIS Commentary"
     url: "https://www.rsis.edu.sg/feed/"
     type: rss
     jurisdiction: sg
     domain: [tech_governance, ai_safety, online_safety]
+    trusted: true
     keywords_filter: ["AI", "digital", "cyber", "technology", "data", "online safety"]
 
   - id: sg_iseas_blog
@@ -110,6 +107,7 @@ sources:
     type: rss
     jurisdiction: sg
     domain: [tech_governance, ai_safety]
+    trusted: true
     keywords_filter: ["digital", "AI", "technology", "data", "cyber", "online"]
 
   - id: sg_data_privacy_asia
@@ -118,6 +116,7 @@ sources:
     type: rss
     jurisdiction: sg
     domain: [tech_governance, online_safety]
+    trusted: true
 
   - id: sg_iapp_apac
     name: "IAPP Asia Pacific"
@@ -125,6 +124,7 @@ sources:
     type: rss
     jurisdiction: sg
     domain: [tech_governance, online_safety]
+    trusted: true
     keywords_filter: ["Singapore", "Asia", "APAC", "PDPA", "ASEAN", "Southeast Asia"]
 
   # ─────────────────────────────────────────────
@@ -136,6 +136,7 @@ sources:
     type: scrape
     jurisdiction: au
     domain: [online_safety, tech_governance]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -146,26 +147,7 @@ sources:
     type: scrape
     jurisdiction: au
     domain: [tech_governance, online_safety]
-    selector: "article"
-    link_selector: "a"
-    date_selector: "time"
-
-  - id: au_esafety_news
-    name: "eSafety Commissioner"
-    url: "https://www.esafety.gov.au/newsroom"
-    type: scrape
-    jurisdiction: au
-    domain: [online_safety]
-    selector: "article"
-    link_selector: "a"
-    date_selector: "time"
-
-  - id: au_ag_news
-    name: "Attorney-General's Dept AU"
-    url: "https://www.ag.gov.au/about-us/news-and-media/media-releases"
-    type: scrape
-    jurisdiction: au
-    domain: [tech_governance, online_safety]
+    trusted: true
     selector: "article"
     link_selector: "a"
     date_selector: "time"
@@ -176,10 +158,11 @@ sources:
     type: rss
     jurisdiction: au
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI", "artificial intelligence", "regulation", "online safety", "data", "privacy", "digital", "cyber"]
+    trusted: false
+    keywords_filter: ["AI regulation", "artificial intelligence law", "online safety legislation", "data privacy law", "cyber law", "digital governance", "eSafety", "ACMA", "OAIC", "tech regulation"]
 
   # ─────────────────────────────────────────────
-  # UNITED KINGDOM
+  # UNITED KINGDOM (all trusted gov sources)
   # ─────────────────────────────────────────────
   - id: uk_ofcom_news
     name: "Ofcom News"
@@ -187,6 +170,7 @@ sources:
     type: rss
     jurisdiction: uk
     domain: [online_safety, tech_governance]
+    trusted: true
 
   - id: uk_ico_news
     name: "ICO News"
@@ -194,6 +178,7 @@ sources:
     type: rss
     jurisdiction: uk
     domain: [tech_governance, online_safety]
+    trusted: true
 
   - id: uk_dsit_news
     name: "DSIT Press Releases"
@@ -201,6 +186,7 @@ sources:
     type: rss
     jurisdiction: uk
     domain: [ai_safety, tech_governance, online_safety]
+    trusted: true
 
   - id: uk_aisi_news
     name: "AI Safety Institute UK"
@@ -208,6 +194,7 @@ sources:
     type: rss
     jurisdiction: uk
     domain: [ai_safety]
+    trusted: true
 
   - id: uk_cma_news
     name: "CMA News"
@@ -215,9 +202,11 @@ sources:
     type: rss
     jurisdiction: uk
     domain: [tech_governance]
+    trusted: true
+    keywords_filter: ["AI", "digital", "tech", "platform", "data", "online"]
 
   # ─────────────────────────────────────────────
-  # EUROPEAN UNION — WORKING SOURCES ONLY
+  # EUROPEAN UNION
   # ─────────────────────────────────────────────
   - id: eu_commission_digital
     name: "EC Digital Strategy News"
@@ -225,6 +214,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [online_safety, ai_safety, tech_governance]
+    trusted: true
 
   - id: eu_edpb_news
     name: "EDPB News"
@@ -232,6 +222,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [tech_governance, online_safety]
+    trusted: true
 
   - id: eu_enisa_news
     name: "ENISA News"
@@ -239,6 +230,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: eu_parliament_news
     name: "European Parliament News"
@@ -246,6 +238,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [ai_safety, tech_governance, online_safety]
+    trusted: true
     keywords_filter: ["AI", "digital", "online safety", "data", "cyber", "artificial intelligence"]
 
   - id: eu_ai_act_tracker
@@ -254,6 +247,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: eu_access_now
     name: "Access Now"
@@ -261,6 +255,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [online_safety, tech_governance, ai_safety]
+    trusted: true
     keywords_filter: ["EU", "Europe", "AI Act", "DSA", "GDPR", "regulation", "digital rights"]
 
   - id: eu_algorithmwatch
@@ -269,6 +264,7 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: eu_edri_news
     name: "EDRi Digital Rights"
@@ -276,6 +272,8 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [online_safety, tech_governance, ai_safety]
+    trusted: true
+    keywords_filter: ["AI", "regulation", "digital rights", "data", "surveillance", "enforcement"]
 
   - id: eu_digitaleurope
     name: "DigitalEurope"
@@ -283,14 +281,30 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [tech_governance, ai_safety]
+    trusted: true
     keywords_filter: ["AI", "digital", "regulation", "policy", "data"]
 
-  - id: eu_future_of_life
-    name: "Future of Life Institute"
-    url: "https://futureoflife.org/feed/"
-    type: rss
-    jurisdiction: global
+  - id: eu_dsa_tracker
+    name: "DSA Enforcement Tracker"
+    url: "https://digital-strategy.ec.europa.eu/en/policies/digital-services-act-package"
+    type: scrape
+    jurisdiction: eu
+    domain: [online_safety, tech_governance]
+    trusted: true
+    selector: "article"
+    link_selector: "a"
+    date_selector: "time"
+
+  - id: eu_ai_office
+    name: "EU AI Office"
+    url: "https://digital-strategy.ec.europa.eu/en/policies/ai-office"
+    type: scrape
+    jurisdiction: eu
     domain: [ai_safety]
+    trusted: true
+    selector: "article"
+    link_selector: "a"
+    date_selector: "time"
 
   # ─────────────────────────────────────────────
   # ASEAN
@@ -301,6 +315,7 @@ sources:
     type: rss
     jurisdiction: asean
     domain: [ai_safety, tech_governance, online_safety]
+    trusted: true
     keywords_filter: ["digital", "AI", "cyber", "data", "technology", "online"]
 
   - id: cf_internet_blog
@@ -309,6 +324,7 @@ sources:
     type: rss
     jurisdiction: asean
     domain: [online_safety, tech_governance]
+    trusted: true
 
   # ─────────────────────────────────────────────
   # GLOBAL — CROSS-JURISDICTIONAL
@@ -319,6 +335,7 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: ada_lovelace_blog
     name: "Ada Lovelace Institute"
@@ -326,6 +343,7 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: ai_now_news
     name: "AI Now Institute"
@@ -333,6 +351,7 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance]
+    trusted: true
 
   - id: tech_policy_press
     name: "Tech Policy Press"
@@ -340,9 +359,18 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
+    trusted: true
+
+  - id: future_of_life
+    name: "Future of Life Institute"
+    url: "https://futureoflife.org/feed/"
+    type: rss
+    jurisdiction: global
+    domain: [ai_safety]
+    trusted: true
 
   # ─────────────────────────────────────────────
-  # BROAD NEWS MEDIA — POLICY FILTERED
+  # BROAD NEWS MEDIA — strict keyword filter, needs pre-score
   # ─────────────────────────────────────────────
   - id: axios_tech_policy
     name: "Axios Tech Policy"
@@ -350,7 +378,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI", "artificial intelligence", "regulation", "policy", "online safety", "tech law", "data privacy", "cyber", "Singapore"]
+    trusted: false
+    keywords_filter: ["AI regulation", "artificial intelligence law", "online safety law", "tech regulation", "data privacy law", "cyber law", "digital governance", "FTC enforcement", "tech policy"]
 
   - id: guardian_tech
     name: "The Guardian Tech"
@@ -358,7 +387,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI regulation", "online safety", "tech policy", "data privacy", "artificial intelligence law", "digital rights", "content moderation", "surveillance"]
+    trusted: false
+    keywords_filter: ["AI regulation", "online safety law", "tech policy", "data privacy law", "artificial intelligence law", "digital rights law", "content moderation law", "surveillance law"]
 
   - id: nyt_tech
     name: "NYT Technology"
@@ -366,7 +396,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI regulation", "online safety", "tech policy", "data privacy", "artificial intelligence", "digital governance", "content moderation", "tech law"]
+    trusted: false
+    keywords_filter: ["AI regulation", "online safety law", "tech policy", "data privacy law", "artificial intelligence law", "digital governance law", "content moderation law", "tech law"]
 
   - id: washington_post_tech
     name: "Washington Post Tech"
@@ -374,7 +405,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI regulation", "online safety", "tech policy", "data privacy", "artificial intelligence", "digital governance", "tech law"]
+    trusted: false
+    keywords_filter: ["AI regulation", "online safety law", "tech policy", "data privacy law", "artificial intelligence law", "digital governance", "tech law", "FTC", "Congress AI"]
 
   - id: the_atlantic_tech
     name: "The Atlantic Tech"
@@ -382,7 +414,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI", "artificial intelligence", "regulation", "online safety", "tech policy", "data privacy", "digital rights", "social media"]
+    trusted: false
+    keywords_filter: ["AI regulation", "online safety law", "tech policy", "data privacy law", "artificial intelligence law", "digital rights law", "social media law"]
 
   - id: mit_tech_review
     name: "MIT Tech Review"
@@ -390,7 +423,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance]
-    keywords_filter: ["regulation", "policy", "governance", "law", "safety", "rights", "surveillance", "enforcement"]
+    trusted: false
+    keywords_filter: ["AI regulation", "policy", "governance law", "safety law", "rights", "surveillance law", "enforcement", "AI Act", "AI legislation"]
 
   - id: wired_security
     name: "Wired Security"
@@ -398,7 +432,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["regulation", "policy", "law", "governance", "AI", "safety", "privacy"]
+    trusted: false
+    keywords_filter: ["AI regulation", "policy law", "governance", "AI legislation", "safety law", "privacy law", "enforcement"]
 
   - id: rest_of_world
     name: "Rest of World"
@@ -406,7 +441,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI", "regulation", "policy", "online safety", "digital", "Singapore", "Southeast Asia", "governance"]
+    trusted: false
+    keywords_filter: ["AI regulation", "tech regulation", "online safety law", "digital governance", "Singapore AI", "Southeast Asia tech law"]
 
   - id: cnn_tech
     name: "CNN Tech"
@@ -414,7 +450,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI regulation", "online safety", "tech policy", "data privacy", "artificial intelligence law", "Big Tech regulation", "social media law"]
+    trusted: false
+    keywords_filter: ["AI regulation", "online safety law", "tech policy law", "data privacy law", "artificial intelligence law", "Big Tech regulation", "social media law"]
 
   - id: lexology_ai
     name: "Lexology AI & Tech"
@@ -422,7 +459,8 @@ sources:
     type: rss
     jurisdiction: global
     domain: [ai_safety, tech_governance]
-    keywords_filter: ["artificial intelligence", "AI regulation", "data protection", "online safety", "digital governance"]
+    trusted: false
+    keywords_filter: ["artificial intelligence regulation", "AI Act", "data protection law", "online safety regulation", "digital governance law"]
 
   - id: tech_eu_policy
     name: "Tech.eu Policy"
@@ -430,4 +468,5 @@ sources:
     type: rss
     jurisdiction: eu
     domain: [ai_safety, tech_governance, online_safety]
-    keywords_filter: ["AI", "regulation", "policy", "digital", "data", "online safety", "governance"]
+    trusted: false
+    keywords_filter: ["AI regulation", "AI Act", "DSA", "GDPR", "digital governance", "online safety law", "data protection"]
