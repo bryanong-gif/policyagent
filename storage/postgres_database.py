@@ -2,9 +2,6 @@
 """
 Postgres adapter — drop-in replacement for database.py.
 Install: pip install psycopg2-binary
-Set DATABASE_URL in config.yaml:
-  database:
-    postgres: "postgresql://user:pass@host:5432/policy_agent"
 """
 
 import json
@@ -16,12 +13,43 @@ from typing import Optional
 from analyser.claude_analyser import AnalysedItem
 
 
+VALID_JURISDICTIONS = {"sg", "au", "uk", "eu", "asean", "global"}
+VALID_DOMAINS       = {"online_safety", "ai_safety", "tech_governance", "other"}
+VALID_URGENCY       = {"monitoring", "notable", "urgent"}
+VALID_SENTIMENT     = {"regulatory_tightening", "regulatory_loosening", "neutral"}
+VALID_CONTENT_TYPES = {
+    "legislation", "consultation", "enforcement", "enforcement_action",
+    "guidance", "academic", "news", "speech", "other"
+}
+
+
+def _safe_jurisdiction(v):
+    v = (v or "global").lower().strip()
+    return v if v in VALID_JURISDICTIONS else "global"
+
+def _safe_domain(v):
+    v = (v or "other").lower().strip()
+    return v if v in VALID_DOMAINS else "other"
+
+def _safe_urgency(v):
+    v = (v or "monitoring").lower().strip()
+    return v if v in VALID_URGENCY else "monitoring"
+
+def _safe_sentiment(v):
+    v = (v or "neutral").lower().strip()
+    return v if v in VALID_SENTIMENT else "neutral"
+
+def _safe_content_type(v):
+    v = (v or "other").lower().strip()
+    return v if v in VALID_CONTENT_TYPES else "other"
+
+
 def url_hash(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()[:32]
 
 
 class PolicyDatabasePG:
-    """Postgres-backed policy store. Mirrors PolicyDatabase (SQLite) API exactly."""
+    """Postgres-backed policy store."""
 
     def __init__(self, dsn: str):
         self.conn = psycopg2.connect(dsn)
@@ -46,10 +74,13 @@ class PolicyDatabasePG:
                        RETURNING id""",
                     (
                         h, item.source_id, item.title, item.url,
-                        None if item.published in ('unknown', '', None) else item.published,
-                        item.jurisdiction,
-                        item.domain, item.content_type,
-                        item.urgency, item.sentiment, item.relevance_score,
+                        None if item.published in ("unknown", "", None) else item.published,
+                        _safe_jurisdiction(item.jurisdiction),
+                        _safe_domain(item.domain),
+                        _safe_content_type(item.content_type),
+                        _safe_urgency(item.urgency),
+                        _safe_sentiment(item.sentiment),
+                        item.relevance_score,
                         item.summary,
                         json.dumps(item.key_points),
                         json.dumps(item.tags),
@@ -62,6 +93,10 @@ class PolicyDatabasePG:
                 return row[0] if row else None
         except psycopg2.errors.UniqueViolation:
             self.conn.rollback()
+            return None
+        except Exception as e:
+            self.conn.rollback()
+            print(f"  [WARN] DB insert failed: {e}")
             return None
 
     def insert_batch(self, items: list[AnalysedItem]) -> tuple[int, int]:
